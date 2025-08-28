@@ -1,31 +1,33 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, status
+from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 
-app = FastAPI()
+from chatbot.schemas import Message, ChatResponse
+from chatbot.core import respond
 
-class Message(BaseModel):
-    text: str
+app = FastAPI(title="AI Chatbot", version="0.1.0")
 
-# Endpoint GET / (truy cập địa chỉ gốc của server)
-# Khi gõ http://127.0.0.1:8000/ thì sẽ trả về JSON như dưới
-@app.get("/")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], allow_credentials=True,
+    allow_methods=["*"], allow_headers=["*"],
+)
+
+@app.get("/", tags=["root"])
 def home():
     return {"message": "Hello, AI chatbot is running!"}
 
+@app.get("/healthz", tags=["ops"])
+def healthz():
+    return {"status": "ok"}
 
-# Endpoint POST /chat (dùng để chat với bot)
-# Client sẽ gửi JSON dạng {"text": "Hello"} lên server
-@app.post("/chat")
+@app.get("/version", tags=["ops"])
+def version():
+    return {"version": app.version}
+
+
+@app.post("/chat", response_model=ChatResponse, status_code=status.HTTP_200_OK, tags=["chat"])
 def chat(msg: Message):
-    
-    user_text = msg.text.lower()
-
-    # Chatbot rule-based (trả lời cứng theo điều kiện)
-    if "hello" in user_text or "hi" in user_text:
-        reply = "Xin chào! Tôi là chatbot của bạn 🤖"
-    elif "bye" in user_text:
-        reply = "Tạm biệt, hẹn gặp lại!"
-    else:
-        reply = "Tôi chưa thông minh lắm, nhưng tôi sẽ học dần 😅"
-        # Trả về JSON gồm: nội dung user gửi + câu trả lời của bot
-    return {"user": msg.text, "bot": reply}
+    logger.info("User said: {}", msg.text)
+    reply = respond(msg.text)
+    return ChatResponse(user=msg.text, bot=reply)
